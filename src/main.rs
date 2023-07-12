@@ -1,8 +1,9 @@
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+};
 
-use lib::Request;
-use lib::Response;
+use lib::{Request, Response};
 
 const BUFFER_SIZE: usize = 1024;
 
