@@ -66,10 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let response_string = match (method, path) {
                             ("GET", "/") => {
                                 let content = include_str!("../routes/index.html");
-                                format!(
-                                    "HTTP/1.1 {}\r\nContent-Type: text/html\r\n\r\n{}",
-                                    200, content
-                                )
+                                html_response(200, content)
                             }
                             ("POST", "/search") => {
                                 // skip headers and collect body all in one
@@ -85,9 +82,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let api_key: String = get_env_var("GIPHY_KEY")
                                     .unwrap_or_else(|_| panic!("GIPHY_KEY not set"));
 
-                                let endpoint = format!("https://api.giphy.com/v1/gifs/search?api_key={}&q={}&limit=25&offset=0", api_key, search_query);
+                                let api_url = format!("https://api.giphy.com/v1/gifs/search?api_key={}&q={}&limit=25&offset=0", api_key, search_query);
 
-                                let giphy_response = reqwest::get(endpoint)
+                                let giphy_response = reqwest::get(api_url)
                                     .await
                                     .expect("Failed to get response")
                                     .json::<GiphyResponse>()
@@ -101,12 +98,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     .map(|gif| giphy_card(&gif.images.downsized.url))
                                     .collect::<String>();
 
-                                format!(
-                                    "HTTP/1.1 {}\r\nContent-Type: text/html\r\n\r\n{}",
-                                    200, gif_cards
-                                )
+                                html_response(200, &gif_cards)
                             }
-                            _ => format!("HTTP/1.1 {}\r\n\r\n{}", 404, "Not Found"),
+                            _ => html_response(404, "<h1>WHOA WTF WHERE AM I????</h1>"),
                         };
 
                         println!("{}", request_string);
@@ -150,4 +144,11 @@ fn parse_query(body: &str) -> HashMap<&str, &str> {
     }
 
     query
+}
+
+fn html_response(status: u16, content: &str) -> String {
+    format!(
+        "HTTP/1.1 {}\r\nContent-Type: text/html\r\n\r\n{}",
+        status, content
+    )
 }
