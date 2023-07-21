@@ -13,7 +13,7 @@
         Search for a sexy gif.
     </h3>
     <form action="/search" method="POST">
-        <input class="form-control" name="search" hx-post="/search" hx-trigger="keyup changed delay:500ms" hx-target="#search-results">
+        <input class="form-control" name="search" hx-get="/search" hx-trigger="keyup changed delay:500ms, search" hx-target="#search-results">
         <noscript>
             <input type="submit">
         </noscript>

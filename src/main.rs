@@ -11,27 +11,9 @@ use serde::{Deserialize, Serialize};
 
 use lib::get_env_var;
 
-const BUFFER_SIZE: usize = 16384;
+const BUFFER_SIZE: usize = 16384; // 16kb
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GiphyResponse {
-    data: Vec<Gif>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Gif {
-    images: Images,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Images {
-    downsized: Downsized,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Downsized {
-    url: String,
-}
+const INDEX_PAGE_HTML: &str = include_str!("../routes/index.html");
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -63,33 +45,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             (method, path, query, http_version)
                         };
 
-                        let response_string = match (method, path) {
-                            ("GET", "/") => {
-                                let content = include_str!("../routes/index.html");
+                        let response_string = match (method, path, query) {
+                            ("GET", "/", _) => {
+                                let content = INDEX_PAGE_HTML;
                                 html_response(200, content)
                             }
-                            ("POST", "/search") => {
-                                // skip headers and collect body all in one
-                                let body: String = lines
-                                    .skip_while(|line| !line.trim().is_empty())
-                                    .skip(1) // skip the empty line between headers and body
-                                    .collect();
-
-                                let parsed_body = parse_query(&body);
-
-                                let search_query = *parsed_body.get("search").unwrap_or(&"");
-
-                                let api_key: String = get_env_var("GIPHY_KEY")
-                                    .unwrap_or_else(|_| panic!("GIPHY_KEY not set"));
-
+                            ("GET", "/search", query) => {
+                                let search_query = *query.get("search").unwrap_or(&"");
+                                let api_key: String = get_env_var("GIPHY_KEY").expect("no key");
                                 let api_url = format!("https://api.giphy.com/v1/gifs/search?api_key={}&q={}&limit=25&offset=0", api_key, search_query);
 
                                 let giphy_response = reqwest::get(api_url)
                                     .await
-                                    .expect("Failed to get response")
+                                    .expect("failed to get response")
                                     .json::<GiphyResponse>()
                                     .await
-                                    .expect("Failed to parse JSON");
+                                    .expect("failed to parse JSON");
 
                                 let gif_objs = giphy_response.data;
 
@@ -125,6 +96,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         });
     }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GiphyResponse {
+    data: Vec<Gif>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Gif {
+    images: Images,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Images {
+    downsized: Downsized,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Downsized {
+    url: String,
 }
 
 const GIPHY_CARD_PARTIAL: &str = include_str!("../partials/giphy-card.html");
