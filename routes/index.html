@@ -2,21 +2,26 @@
 <html>
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/htmx.org@1.9.3" integrity="sha384-lVb3Rd/Ca0AxaoZg5sACe8FJKF0tnUgR2Kd7ehUOG5GCcROv5uBIZsOqovBAcWua" crossorigin="anonymous"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.3" integrity="sha384-lVb3Rd/Ca0AxaoZg5sACe8FJKF0tnUgR2Kd7ehUOG5GCcROv5uBIZsOqovBAcWua" crossorigin="anonymous"></script>
 </head>
 
 <body>
-  <h3>
-    Search for a sexy gif.
-  </h3>
-  <input class="form-control" type="search" name="search" placeholder="Begin searching gifs..." hx-post="/search" hx-trigger="keyup changed delay:500ms, search" hx-target="#search-results" hx-indicator=".htmx-indicator">
+    <h3>
+        Search for a sexy gif.
+    </h3>
+    <form action="/search" method="POST">
+        <input class="form-control" name="search" hx-post="/search" hx-trigger="keyup changed delay:500ms" hx-target="#search-results">
+        <noscript>
+            <input type="submit">
+        </noscript>
+    </form>
 
-  <div id="search-results" class="grid grid grid-cols-4 gap-4">
+    <div id="search-results" class="grid grid grid-cols-4 gap-4">
 
-  </div>
-  </body>
+    </div>
+</body>
 
 </html>

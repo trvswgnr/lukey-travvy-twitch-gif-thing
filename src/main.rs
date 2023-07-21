@@ -1,3 +1,7 @@
+#![deny(clippy::unwrap_used)]
+
+use std::collections::HashMap;
+
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -5,9 +9,9 @@ use tokio::{
 
 use serde::{Deserialize, Serialize};
 
-use lib::{get_env_var, Request, Response};
+use lib::get_env_var;
 
-const BUFFER_SIZE: usize = 1024;
+const BUFFER_SIZE: usize = 16384;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct GiphyResponse {
@@ -43,65 +47,69 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             return;
                         }
 
-                        let mut response_string = "".to_string();
-
                         let request_string = String::from_utf8_lossy(&buf[..n]);
                         let mut lines = request_string.lines();
 
-                        let request_line = lines.next().unwrap();
+                        let request_line = lines.next().unwrap_or("");
 
-                        if request_line == "GET / HTTP/1.1" {
-                            let content = include_str!("../routes/index.html");
-                            response_string = format!(
-                                "HTTP/1.1 {}\r\nContent-Type: text/html\r\n\r\n{}",
-                                200, content
-                            );
-                        }
+                        let (method, path, query, http_version) = {
+                            let mut parts = request_line.split_whitespace();
+                            let method = parts.next().unwrap_or("GET");
+                            let path = parts.next().unwrap_or("/404");
+                            let mut qparts = path.split('?');
+                            let path = qparts.next().unwrap_or("");
+                            let query = parse_query(qparts.next().unwrap_or(""));
+                            let http_version = parts.next().unwrap_or("HTTP/1.1");
+                            (method, path, query, http_version)
+                        };
 
-                        if request_line == "POST /search HTTP/1.1" {
-                            for line in lines.by_ref() {
-                                if line.trim().is_empty() {
-                                    break;
-                                }
+                        let response_string = match (method, path) {
+                            ("GET", "/") => {
+                                let content = include_str!("../routes/index.html");
+                                format!(
+                                    "HTTP/1.1 {}\r\nContent-Type: text/html\r\n\r\n{}",
+                                    200, content
+                                )
                             }
+                            ("POST", "/search") => {
+                                // skip headers and collect body all in one
+                                let body: String = lines
+                                    .skip_while(|line| !line.trim().is_empty())
+                                    .skip(1) // skip the empty line between headers and body
+                                    .collect();
 
-                            let body: String = lines.collect();
+                                let parsed_body = parse_query(&body);
 
-                            let search_query = body.split('=').last().unwrap();
+                                let search_query = *parsed_body.get("search").unwrap_or(&"");
 
-                            let api_key: String = get_env_var("GIPHY_KEY").unwrap();
+                                let api_key: String = get_env_var("GIPHY_KEY")
+                                    .unwrap_or_else(|_| panic!("GIPHY_KEY not set"));
 
-                            let endpoint = format!("https://api.giphy.com/v1/gifs/search?api_key={api_key}&q={search_query}&limit=25&offset=0");
+                                let endpoint = format!("https://api.giphy.com/v1/gifs/search?api_key={}&q={}&limit=25&offset=0", api_key, search_query);
 
-                            let giphy_response = reqwest::get(endpoint)
-                                .await
-                                .unwrap()
-                                .json::<GiphyResponse>()
-                                .await
-                                .unwrap();
-                            let gif_objs = giphy_response.data;
+                                let giphy_response = reqwest::get(endpoint)
+                                    .await
+                                    .expect("Failed to get response")
+                                    .json::<GiphyResponse>()
+                                    .await
+                                    .expect("Failed to parse JSON");
 
-                            let mut gif_cards = String::new();
+                                let gif_objs = giphy_response.data;
 
-                            for gif in gif_objs {
-                                let gif_url = gif.images.downsized.url;
+                                let gif_cards = gif_objs
+                                    .iter()
+                                    .map(|gif| giphy_card(&gif.images.downsized.url))
+                                    .collect::<String>();
 
-                                gif_cards.push_str(&giphy_card(&gif_url));
-
-                                println!("URL: {}", gif_url);
+                                format!(
+                                    "HTTP/1.1 {}\r\nContent-Type: text/html\r\n\r\n{}",
+                                    200, gif_cards
+                                )
                             }
+                            _ => format!("HTTP/1.1 {}\r\n\r\n{}", 404, "Not Found"),
+                        };
 
-                            response_string = format!(
-                                "HTTP/1.1 {}\r\nContent-Type: text/html\r\n\r\n{}",
-                                200, gif_cards
-                            );
-                            println!("search query = {search_query}");
-                        }
-
-                        // println!("{request_string}");
-
-                        // let lines = request_string.line();
-                        // let req_header = lines.next().unwrap();
+                        println!("{}", request_string);
 
                         if let Err(e) = stream.write_all(response_string.as_bytes()).await {
                             eprintln!("failed to write to socket; err = {:?}", e);
@@ -128,4 +136,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 const GIPHY_CARD_PARTIAL: &str = include_str!("../partials/giphy-card.html");
 fn giphy_card(src: &str) -> String {
     GIPHY_CARD_PARTIAL.replace("{src}", src)
+}
+
+// search=asdfa&test=dddfasdfasd
+fn parse_query(body: &str) -> HashMap<&str, &str> {
+    let mut query = HashMap::new();
+
+    for pair in body.split('&') {
+        let mut key_value = pair.split('=');
+        let key = key_value.next().unwrap_or("");
+        let value = key_value.next().unwrap_or("");
+        query.insert(key, value);
+    }
+
+    query
 }
